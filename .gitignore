@@ -17,6 +17,7 @@ SampleSubmissionStage2.csv
 SampleTourney2018/*
 Stage2UnchangedDataFiles/*
 Stage2UpdatedDataFiles/*
+EDA/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
