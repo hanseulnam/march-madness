@@ -1,0 +1,1323 @@
+---
+title: "Exploring MMLM2017"
+output: 
+    html_document: 
+      toc: true
+---
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+# get correct root file
+knitr::opts_knit$set(root.dir = 'C:/Users/Jamie/Downloads/DataFiles')
+
+# load packages 
+library(data.table)
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+library(gridExtra)
+library(ggExtra)
+
+# load data
+teams <- read.csv('Teams.csv')
+seasons <- read.csv('/kaggle/input/Seasons.csv')
+rsdr <- read.csv('/kaggle/input/RegularSeasonDetailedResults.csv')
+tdr <- read.csv('/kaggle/input/TourneyDetailedResults.csv')
+Tseeds <- read.csv('/kaggle/input/TourneySeeds.csv')
+Tslots <- read.csv('/kaggle/input/TourneySlots.csv')
+```
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+# Multiple plot function [http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_%28ggplot2%29/]
+#
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# then plot 1 will go in the upper left, 2 will go in the upper right, and
+# 3 will go all the way across the bottom.
+#
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+```
+# Season Analysis
+
+### Percenatge of wins in each game location
+
+First I decided to look at what percentage of games were won at each location (Home, Away or Neutral)
+across all seasons. 60 % of all wins occurred in the winning team's home stadium.
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+# calculate frequency
+rs_loc_freq <- as.data.frame(count(rsdr$Wloc))
+# calculate percentage and round to 2sf
+rs_loc_freq['percentage'] <- 100 / sum(rs_loc_freq$freq) * rs_loc_freq$freq
+rs_loc_freq['percentage_r'] <- signif(rs_loc_freq$percentage, digits = 3)
+# calculate center of each segment for label
+rs_loc_freq['pos'] <- cumsum(rs_loc_freq$percentage) - rs_loc_freq$percentage/2
+# set levels for segments so can order to match labels
+rs_loc_freq$x <- factor(rs_loc_freq$x, levels = rev(rs_loc_freq$x))
+
+# pie chart theme
+blank_theme <- theme_minimal()+
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.border = element_blank(),
+    panel.grid=element_blank(),
+    axis.ticks = element_blank(),
+    axis.text = element_blank(),
+    plot.title=element_text(size=14, face="bold", hjust = 0.5)
+  )
+
+# pie chart code
+p <- ggplot(rs_loc_freq, aes(x="", y=percentage_r, fill=x)) +
+  geom_bar(stat = "identity") + blank_theme
+
+pie <- p + coord_polar("y") + 
+  ggtitle("Season: Percentage of games won at each location") + 
+  scale_fill_brewer("Blues") +
+  guides(fill=guide_legend(title='Location')) + 
+  geom_text(aes(y = pos, label = percentage_r), size=4)
+
+pie
+```
+
+### Frequency of overtime periods
+
+Next I decided to look at how frequent overtime periods were across all of the seasons games. 
+It can be seen that the overwhelming majority of games do not go to overtime.
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+# calculate frequency
+  rs_ot_freq <- as.data.frame(count(rsdr$Numot))
+  rs_ot_freq$x <- as.factor(rs_ot_freq$x)
+
+blank_theme2 <- theme_bw()+
+  theme(
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    panel.grid=element_blank(),
+    plot.title=element_text(size=13, face="bold", hjust = 0.5),
+    axis.title.x = element_text(size=13), 
+    axis.title.y = element_text(size=13)
+  )
+
+ggplot(rs_ot_freq, aes(x=x, y=freq)) +
+  blank_theme2 +
+  ggtitle("Season: Number of Overtime Periods") +
+  geom_bar(stat='identity') +
+  xlab("Overtime Periods") + 
+  ylab('Frequency') +
+  geom_text(aes(label=freq), vjust=-0.3, size=3.5)
+```
+
+### Win percentage for all teams
+
+I then wanted to see how wins were spread across the various participating teams in the season.
+This would identify whether a handful of teams were dominating.
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+# calculate win frequency
+rs_team_Wfreq <- as.data.frame(count(rsdr$Wteam))
+rs_team_Wfreq$x <- as.factor(rs_team_Wfreq$x)
+
+# calculate loss frequency
+rs_team_Lfreq <- as.data.frame(count(rsdr$Lteam))
+rs_team_Lfreq$x <- as.factor(rs_team_Lfreq$x)
+
+# rename to a common name so can be merged with teams
+colnames(rs_team_Wfreq)[1] <- "Team_Id"
+colnames(rs_team_Lfreq)[1] <- "Team_Id"
+
+# merge data frame with teams so team names are shown as well as Team Id
+rs_team_Wfreq <- merge(rs_team_Wfreq, teams, by="Team_Id")
+
+win_frequency <- merge(rs_team_Wfreq, rs_team_Lfreq, by="Team_Id")
+
+#rename columns for clarity
+colnames(win_frequency)[2] <- "Win"
+colnames(win_frequency)[4] <- "Loss"
+
+# calculate win percentage
+win_frequency["Percentage"] <- (100 / (win_frequency$Win + win_frequency$Loss)) * win_frequency$Win
+
+# team name as factor
+win_frequency$Team_Id <- as.factor(win_frequency$Team_Id)
+
+win_frequency$Team_Id <- factor(win_frequency$Team_Id, levels = win_frequency$Team_Id[order(win_frequency$Percentage)])
+
+# plot
+ggplot(win_frequency, aes(x=Team_Id, y=Percentage)) +
+  blank_theme2 +
+  ylim(0, 100) +
+  ggtitle("Season: Percentage of games won") +
+  geom_bar(stat='identity') +
+  xlab("Team Name")
+```
+
+We can then ask "What were the top/least scoring teams across all seasons?"
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+print("What are the top 30 teams? ")
+head(win_frequency[order(-win_frequency$Percentage), ], n=30)
+print("What are the worst 30 teams? ")
+head(win_frequency[order(win_frequency$Percentage), ], n=30)
+```
+
+### Average points scored for each team
+
+Next I wanted to see how the average number of points scored differed across the teams using the sum points scored from both wins and losses divided against the total number of games played.
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+# extract Wteam and Wscore 
+
+Wscores <- as.data.frame(rsdr$Wteam)
+colnames(Wscores)[1] <- "Team_Id"
+Wscores['Score'] <- rsdr$Wscore
+
+
+Lscores <- as.data.frame(rsdr$Lteam)
+colnames(Lscores)[1] <- "Team_Id"
+Lscores['Score'] <- rsdr$Lscore
+
+
+# calculate team with highest score
+AllScores <- rbind(Wscores, Lscores)
+
+Agg_Scores <- aggregate(Score ~ Team_Id, data = AllScores,  FUN = "mean")
+
+Agg_Scores <- merge(Agg_Scores, teams, by = "Team_Id")
+
+# team name as factor
+Agg_Scores$Team_Id <- as.factor(Agg_Scores$Team_Id)
+
+Agg_Scores$Team_Id <- factor(Agg_Scores$Team_Id, levels = Agg_Scores$Team_Id[order(Agg_Scores$Score)])
+
+# plot
+ggplot(Agg_Scores, aes(x=Team_Id, y=Score)) +
+  blank_theme2 +
+  ylim(0, 100) +
+  ggtitle("Season: Average Points Scored Over All Appearences (Win or Lose)") +
+  geom_bar(stat='identity') +
+  xlab("Team Name") + 
+  ylab('Average Points Scored')
+
+```
+
+We can then ask "What were the worst/best performing teams across all seasons?"
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+print("What are the top 30 teams? ")
+head(Agg_Scores[order(-Agg_Scores$Score), ], n=30)
+print("What are the worst 30 teams? ")
+head(Agg_Scores[order(Agg_Scores$Score), ], n=30)
+```
+
+### How does the number of points scored correlate to the game result?
+
+The number of points scored in and of itself isn't a good predictor
+of the result as there are both high and low scoring wins, as well as high scoring losses.
+
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+Wscores2 <- as.data.frame(rsdr$Wteam)
+colnames(Wscores2)[1] <- "Team_Id"
+Wscores2['Score'] <- rsdr$Wscore
+Wscores2['Result'] <- 'Win'
+
+
+Lscores2 <- as.data.frame(rsdr$Lteam)
+colnames(Lscores2)[1] <- "Team_Id"
+Lscores2['Score'] <- rsdr$Lscore
+Lscores2['Result'] <- 'Loss'
+
+
+# calculate team with highest score
+AllScores2 <- rbind(Wscores2, Lscores2)
+
+#plot
+ggplot(AllScores2, aes(x=Score, y=Result, fill = Result, colour = Result)) +
+  blank_theme2 +
+  xlim(0, 150) +
+  ggtitle("Season: Game Result Relative to Points Scored") +
+  geom_point(stat='identity') +
+  xlab("Points Scored in Game") + 
+  ylab('Result')
+```
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+# Calculate win probability based on scores
+Wscores_freq <- as.data.frame(count(Wscores$Score))
+Lscores_freq <- as.data.frame(count(Lscores$Score))
+scores_prob <- merge(Wscores_freq, Lscores_freq, by=c("x"="x"), all=TRUE)
+
+colnames(scores_prob)[1] <- "score"
+colnames(scores_prob)[2] <- "win"
+colnames(scores_prob)[3] <- "loss"
+
+# function for calculating probability
+probCalc <- function(d){
+     d$win / (d$win + d$loss)
+}
+
+scores_prob['prob'] <- probCalc(scores_prob)
+
+# Calculate win probability based on fgm
+wfgm <- as.data.frame(count(rsdr$Wfgm))
+lfgm <- as.data.frame(count(rsdr$Lfgm))
+fgm_prob <- merge(wfgm, lfgm, by=c("x"="x"), all=TRUE)
+
+colnames(fgm_prob)[1] <- "no.fgm"
+colnames(fgm_prob)[2] <- "win"
+colnames(fgm_prob)[3] <- "loss"
+
+fgm_prob['prob'] <- probCalc(fgm_prob)
+
+# Calculate win probability based on fga
+wfga <- as.data.frame(count(rsdr$Wfga))
+lfga <- as.data.frame(count(rsdr$Lfga))
+fga_prob <- merge(wfga, lfga, by=c("x"="x"), all=TRUE)
+
+colnames(fga_prob)[1] <- "no.fga"
+colnames(fga_prob)[2] <- "win"
+colnames(fga_prob)[3] <- "loss"
+
+fga_prob['prob'] <- probCalc(fga_prob)
+
+# Calculate win probability based on fgm3
+wfgm3 <- as.data.frame(count(rsdr$Wfgm3))
+lfgm3 <- as.data.frame(count(rsdr$Lfgm3))
+fgm3_prob <- merge(wfgm3, lfgm3, by=c("x"="x"), all=TRUE)
+
+colnames(fgm3_prob)[1] <- "no.fgm3"
+colnames(fgm3_prob)[2] <- "win"
+colnames(fgm3_prob)[3] <- "loss"
+
+fgm3_prob['prob'] <- probCalc(fgm3_prob)
+
+# Calculate win probability based on fga3
+wfga3 <- as.data.frame(count(rsdr$Wfga3))
+lfga3 <- as.data.frame(count(rsdr$Lfga3))
+fga3_prob <- merge(wfga3, lfga3, by=c("x"="x"), all=TRUE)
+
+colnames(fga3_prob)[1] <- "no.fga3"
+colnames(fga3_prob)[2] <- "win"
+colnames(fga3_prob)[3] <- "loss"
+
+fga3_prob['prob'] <- probCalc(fga3_prob)
+
+# Calculate win probability based on tfm
+wftm <- as.data.frame(count(rsdr$Wftm))
+lftm <- as.data.frame(count(rsdr$Lftm))
+ftm_prob <- merge(wftm, lftm, by=c("x"="x"), all=TRUE)
+
+colnames(ftm_prob)[1] <- "no.ftm"
+colnames(ftm_prob)[2] <- "win"
+colnames(ftm_prob)[3] <- "loss"
+
+ftm_prob['prob'] <- probCalc(ftm_prob)
+
+# Calculate win probability based on tfa
+wfta <- as.data.frame(count(rsdr$Wfta))
+lfta <- as.data.frame(count(rsdr$Lfta))
+fta_prob <- merge(wfta, lfta, by=c("x"="x"), all=TRUE)
+
+colnames(fta_prob)[1] <- "no.fta"
+colnames(fta_prob)[2] <- "win"
+colnames(fta_prob)[3] <- "loss"
+
+fta_prob['prob'] <- probCalc(fta_prob)
+
+# Calculate win probability based on or
+wor <- as.data.frame(count(rsdr$Wor))
+lor <- as.data.frame(count(rsdr$Lor))
+or_prob <- merge(wor, lor, by=c("x"="x"), all=TRUE)
+
+colnames(or_prob)[1] <- "no.or"
+colnames(or_prob)[2] <- "win"
+colnames(or_prob)[3] <- "loss"
+
+or_prob['prob'] <- probCalc(or_prob)
+
+# Calculate win probability based on dr
+wdr <- as.data.frame(count(rsdr$Wdr))
+ldr <- as.data.frame(count(rsdr$Ldr))
+dr_prob <- merge(wdr, ldr, by=c("x"="x"), all=TRUE)
+
+colnames(dr_prob)[1] <- "no.dr"
+colnames(dr_prob)[2] <- "win"
+colnames(dr_prob)[3] <- "loss"
+
+dr_prob['prob'] <- probCalc(dr_prob)
+
+# Calculate win probability based on ast
+wast <- as.data.frame(count(rsdr$Wast))
+last <- as.data.frame(count(rsdr$Last))
+ast_prob <- merge(wast, last, by=c("x"="x"), all=TRUE)
+
+colnames(ast_prob)[1] <- "no.ast"
+colnames(ast_prob)[2] <- "win"
+colnames(ast_prob)[3] <- "loss"
+
+ast_prob['prob'] <- probCalc(ast_prob)
+
+# Calculate win probability based on to
+wto <- as.data.frame(count(rsdr$Wto))
+lto <- as.data.frame(count(rsdr$Lto))
+to_prob <- merge(wto, lto, by=c("x"="x"), all=TRUE)
+
+colnames(to_prob)[1] <- "no.to"
+colnames(to_prob)[2] <- "win"
+colnames(to_prob)[3] <- "loss"
+
+to_prob['prob'] <- probCalc(to_prob)
+
+# Calculate win probability based on stl
+wstl <- as.data.frame(count(rsdr$Wstl))
+lstl <- as.data.frame(count(rsdr$Lstl))
+stl_prob <- merge(wstl, lstl, by=c("x"="x"), all=TRUE)
+
+colnames(stl_prob)[1] <- "no.stl"
+colnames(stl_prob)[2] <- "win"
+colnames(stl_prob)[3] <- "loss"
+
+stl_prob['prob'] <- probCalc(stl_prob)
+
+# Calculate win probability based on blk
+wblk <- as.data.frame(count(rsdr$Wblk))
+lblk <- as.data.frame(count(rsdr$Lblk))
+blk_prob <- merge(wblk, lblk, by=c("x"="x"), all=TRUE)
+
+colnames(blk_prob)[1] <- "no.blk"
+colnames(blk_prob)[2] <- "win"
+colnames(blk_prob)[3] <- "loss"
+
+blk_prob['prob'] <- probCalc(blk_prob)
+
+# Calculate win probability based on pf
+wpf <- as.data.frame(count(rsdr$Wpf))
+lpf <- as.data.frame(count(rsdr$Lpf))
+pf_prob <- merge(wpf, lpf, by=c("x"="x"), all=TRUE)
+
+colnames(pf_prob)[1] <- "no.pf"
+colnames(pf_prob)[2] <- "win"
+colnames(pf_prob)[3] <- "loss"
+
+pf_prob['prob'] <- probCalc(pf_prob)
+
+#-----------------------------------------
+
+p1 <- ggplot(scores_prob, aes(x=score, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("Points Scored in Game") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p2 <- ggplot(fgm_prob, aes(x=no.fgm, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("fgm") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p3 <- ggplot(fga_prob, aes(x=no.fga, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("fga") + 
+  ylab('Win Probability') +
+  blank_theme2 +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p4 <- ggplot(fgm3_prob, aes(x=no.fgm3, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("fgm3") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p5 <- ggplot(fga3_prob, aes(x=no.fga3, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("fga3") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p6 <- ggplot(ftm_prob, aes(x=no.ftm, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("ftm") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p7 <- ggplot(fta_prob, aes(x=no.fta, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("fta") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p8 <- ggplot(or_prob, aes(x=no.or, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("or") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p9 <- ggplot(dr_prob, aes(x=no.dr, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("dr") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p10 <- ggplot(ast_prob, aes(x=no.ast, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("ast") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p11 <- ggplot(to_prob, aes(x=no.to, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("to") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p12 <- ggplot(stl_prob, aes(x=no.stl, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("stl") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p13 <- ggplot(blk_prob, aes(x=no.blk, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("blk") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p14 <- ggplot(pf_prob, aes(x=no.pf, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("pf") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+
+```
+### Win probability across features
+
+How influencial is each feature on the result of the game?
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+multiplot(p1, p2, p3, p4, p5, p6, cols = 2)
+```
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+multiplot(p7, p8, p9, p10, p11, p12, cols = 2)
+```
+```{r fig.width=4, fig.height =2, fig.align='center', message=FALSE, warning=FALSE, echo = FALSE}
+
+multiplot(p13, p14, cols = 2)
+
+```
+
+### Win probability using efficiency metrics 
+
+JasonBoudreau suggested using efficiency as a useful indicator of team performance. Here instead of using the raw numbers for the fg ft and fg3 features 
+they have been calculated as made/attempts = efficiency. Ast and to have also been included to indicate team efficiency on offense and defense, as suggested.
+
+With that said, how influencial is are these metrics on the result of the game?
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+# Calculate the efficiencies for differnet features for the winning teams
+rsdr["fgWE"] <- rsdr$Wfgm / rsdr$Wfga
+rsdr["ftWE"] <- rsdr$Wftm / rsdr$Wfta
+rsdr["fg3WE"] <- rsdr$Wfgm3 / rsdr$Wfga3
+rsdr["ast_toWE"] <- rsdr$Wast / rsdr$Wto
+
+# Calculate the efficiencies for differnet features for the losing teams
+rsdr["fgLE"] <- rsdr$Lfgm / rsdr$Lfga
+rsdr["ftLE"] <- rsdr$Lftm / rsdr$Lfta
+rsdr["fg3LE"] <- rsdr$Lfgm3 / rsdr$Lfga3
+rsdr["ast_toLE"] <- rsdr$Last / rsdr$Lto
+
+#----------------------------------------------------------------------
+
+# calculate the win probability based on the fg efiiciency
+wfgE <- as.data.frame(count(rsdr$fgWE))
+lfgE <- as.data.frame(count(rsdr$fgLE))
+
+fgE_prob <- merge(wfgE, lfgE, by=c("x"="x"), all=TRUE)
+
+colnames(fgE_prob)[1] <- "Efficiency"
+colnames(fgE_prob)[2] <- "win"
+colnames(fgE_prob)[3] <- "loss"
+
+fgE_prob['prob'] <- probCalc(fgE_prob)
+
+# calculate the win probability based on the ft efiiciency
+wftE <- as.data.frame(count(rsdr$ftWE))
+lftE <- as.data.frame(count(rsdr$ftLE))
+
+ftE_prob <- merge(wftE, lftE, by=c("x"="x"), all=TRUE)
+
+colnames(ftE_prob)[1] <- "Efficiency"
+colnames(ftE_prob)[2] <- "win"
+colnames(ftE_prob)[3] <- "loss"
+
+ftE_prob['prob'] <- probCalc(ftE_prob)
+
+# calculate the win probability based on the fg3 efiiciency
+wfg3E <- as.data.frame(count(rsdr$fg3WE))
+lfg3E <- as.data.frame(count(rsdr$fg3LE))
+
+fg3E_prob <- merge(wfg3E, lfg3E, by=c("x"="x"), all=TRUE)
+
+colnames(fg3E_prob)[1] <- "Efficiency"
+colnames(fg3E_prob)[2] <- "win"
+colnames(fg3E_prob)[3] <- "loss"
+
+fg3E_prob['prob'] <- probCalc(fg3E_prob)
+
+# calculate the win probability based on the ast/ to efiiciency
+wastE <- as.data.frame(count(rsdr$ast_toWE))
+lastE <- as.data.frame(count(rsdr$ast_toLE))
+
+ast_to_prob <- merge(wastE, lastE, by=c("x"="x"), all=TRUE)
+
+colnames(ast_to_prob)[1] <- "Efficiency"
+colnames(ast_to_prob)[2] <- "win"
+colnames(ast_to_prob)[3] <- "loss"
+
+ast_to_prob['prob'] <- probCalc(ast_to_prob)
+
+# plots ----------------------------------------------------
+
+p15 <- ggplot(fgE_prob, aes(x=Efficiency*100, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlim(0, 100) +
+  xlab("fgm / fga percentage") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p16 <- ggplot(ftE_prob, aes(x=Efficiency*100, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlim(0, 100) +
+  xlab("ftm / fta percentage") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p17 <- ggplot(fg3E_prob, aes(x=Efficiency*100, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlim(0, 100) +
+  xlab("fg3m / fg3a percentage") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p18 <- ggplot(ast_to_prob, aes(x=Efficiency*100, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlim(0, 100) +
+  xlab("ast / to percentage") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+```
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+multiplot(p15, p16, p17, p18,  cols = 2)
+```
+
+# Tournament Analysis
+
+Lets see how well the above observations hold for the tournament games.
+
+### Frequency of overtime periods
+
+As all of the tournament games are at neutral locations I jumped straight into looking at the overtime periods were across all of the tournament games.
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+# calculate frequency
+  t_ot_freq <- as.data.frame(count(tdr$Numot))
+  t_ot_freq$x <- as.factor(t_ot_freq$x)
+
+ggplot(t_ot_freq, aes(x=x, y=freq)) +
+  blank_theme2 +
+  ggtitle("Tournament: Number of Overtime Periods") +
+  geom_bar(stat='identity') +
+  xlab("Overtime Periods") + 
+  ylab('Frequency') +
+  geom_text(aes(label=freq), vjust=-0.3, size=3.5)
+```
+
+### Win percentage for all teams
+
+I then wanted to see how wins were spread across the various participating teams in the tournaments.
+This would identify whether a handful of teams were dominating.
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+# calculate win frequency
+t_team_Wfreq <- as.data.frame(count(tdr$Wteam))
+t_team_Wfreq$x <- as.factor(t_team_Wfreq$x)
+
+# calculate loss frequency
+t_team_Lfreq <- as.data.frame(count(tdr$Lteam))
+t_team_Lfreq$x <- as.factor(t_team_Lfreq$x)
+
+# rename to a common name so can be merged with teams
+colnames(t_team_Wfreq)[1] <- "Team_Id"
+colnames(t_team_Lfreq)[1] <- "Team_Id"
+
+# merge data frame with teams so team names are shown as well as Team Id
+t_team_Wfreq <- merge(t_team_Wfreq, teams, by="Team_Id")
+
+t_win_frequency <- merge(t_team_Wfreq, t_team_Lfreq, by="Team_Id")
+
+#rename columns for clarity
+colnames(t_win_frequency)[2] <- "Win"
+colnames(t_win_frequency)[4] <- "Loss"
+
+# calculate win percentage
+t_win_frequency["Percentage"] <- (100 / (t_win_frequency$Win + t_win_frequency$Loss)) * t_win_frequency$Win
+
+# team name as factor
+t_win_frequency$Team_Id <- as.factor(t_win_frequency$Team_Id)
+
+t_win_frequency$Team_Id <- factor(t_win_frequency$Team_Id, levels = t_win_frequency$Team_Id[order(t_win_frequency$Percentage)])
+
+# plot
+ggplot(t_win_frequency, aes(x=Team_Id, y=Percentage)) +
+  blank_theme2 +
+  ylim(0, 100) +
+  ggtitle("Tournament: Percentage of games won") +
+  geom_bar(stat='identity') +
+  xlab("Team Name")
+```
+
+We can then ask "What were the top/least scoring teams across all tournaments?". It is intresting to note that win percentage does not directly corrolate with tournaments won. UCLA, who have won the most tournaments (11), are ranked in 11th place with 68 %, whilst Connecticut are 1st with 80 % and have won 5 tournamnents. Perhaps this is reflective of the number of tournaments the teams have qualified for over the years.
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+print("What are the top 30 teams? ")
+head(t_win_frequency[order(-t_win_frequency$Percentage), ], n=30)
+print("What are the worst 30 teams? ")
+head(t_win_frequency[order(t_win_frequency$Percentage), ], n=30)
+```
+
+### Average points scored for each team
+
+Next I wanted to see how the average number of points scored differed across the teams using the sum points scored from both wins and losses divided against the total number of games played.
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+# extract Wteam and Wscore 
+
+tWscores <- as.data.frame(tdr$Wteam)
+colnames(tWscores)[1] <- "Team_Id"
+tWscores['Score'] <- tdr$Wscore
+
+
+tLscores <- as.data.frame(tdr$Lteam)
+colnames(tLscores)[1] <- "Team_Id"
+tLscores['Score'] <- tdr$Lscore
+
+
+# calculate team with highest score
+tAllScores <- rbind(tWscores, tLscores)
+
+tAgg_Scores <- aggregate(Score ~ Team_Id, data = tAllScores,  FUN = "mean")
+
+tAgg_Scores <- merge(tAgg_Scores, teams, by = "Team_Id")
+
+# team name as factor
+tAgg_Scores$Team_Id <- as.factor(tAgg_Scores$Team_Id)
+
+tAgg_Scores$Team_Id <- factor(tAgg_Scores$Team_Id, levels = tAgg_Scores$Team_Id[order(tAgg_Scores$Score)])
+
+# plot
+ggplot(tAgg_Scores, aes(x=Team_Id, y=Score)) +
+  blank_theme2 +
+  ylim(0, 100) +
+  ggtitle("Tournament: Average Points Scored Over All Appearences (Win or Lose)") +
+  geom_bar(stat='identity') +
+  xlab("Team Name") + 
+  ylab('Average Points Scored')
+
+```
+
+
+We can then ask "What were the worst/best performing teams across all tournaments?"
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+print("What are the top 30 teams? ")
+head(tAgg_Scores[order(-tAgg_Scores$Score), ], n=30)
+print("What are the worst 30 teams? ")
+head(tAgg_Scores[order(tAgg_Scores$Score), ], n=30)
+```
+
+### How does the number of points scored correlate to the game result?
+
+The number of points scored in and of itself isn't a good predictor
+of the result as there are both high and low scoring wins, as well as high scoring losses.
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+tWscores2 <- as.data.frame(tdr$Wteam)
+colnames(tWscores2)[1] <- "Team_Id"
+tWscores2['Score'] <- tdr$Wscore
+tWscores2['Result'] <- 'Win'
+
+
+tLscores2 <- as.data.frame(tdr$Lteam)
+colnames(tLscores2)[1] <- "Team_Id"
+tLscores2['Score'] <- tdr$Lscore
+tLscores2['Result'] <- 'Loss'
+
+
+# calculate team with highest score
+tAllScores2 <- rbind(tWscores2, tLscores2)
+
+#plot
+ggplot(tAllScores2, aes(x=Score, y=Result, fill = Result, colour = Result)) +
+  blank_theme2 +
+  xlim(0, 150) +
+  ggtitle("Tournament: Game Result Relative to Points Scored") +
+  geom_point(stat='identity') +
+  xlab("Points Scored in Game") + 
+  ylab('Result')
+```
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+# Calculate win probability based on scores
+tWscores_freq <- as.data.frame(count(tWscores$Score))
+tLscores_freq <- as.data.frame(count(tLscores$Score))
+tscores_prob <- merge(tWscores_freq, tLscores_freq, by=c("x"="x"), all=TRUE)
+
+colnames(tscores_prob)[1] <- "score"
+colnames(tscores_prob)[2] <- "win"
+colnames(tscores_prob)[3] <- "loss"
+
+# function for calculating probability
+probCalc <- function(d){
+     d$win / (d$win + d$loss)
+}
+
+tscores_prob['prob'] <- probCalc(tscores_prob)
+
+# Calculate win probability based on fgm
+twfgm <- as.data.frame(count(tdr$Wfgm))
+tlfgm <- as.data.frame(count(tdr$Lfgm))
+tfgm_prob <- merge(twfgm, tlfgm, by=c("x"="x"), all=TRUE)
+
+colnames(tfgm_prob)[1] <- "no.fgm"
+colnames(tfgm_prob)[2] <- "win"
+colnames(tfgm_prob)[3] <- "loss"
+
+tfgm_prob['prob'] <- probCalc(tfgm_prob)
+
+# Calculate win probability based on fga
+twfga <- as.data.frame(count(tdr$Wfga))
+tlfga <- as.data.frame(count(tdr$Lfga))
+tfga_prob <- merge(twfga, tlfga, by=c("x"="x"), all=TRUE)
+
+colnames(tfga_prob)[1] <- "no.fga"
+colnames(tfga_prob)[2] <- "win"
+colnames(tfga_prob)[3] <- "loss"
+
+tfga_prob['prob'] <- probCalc(tfga_prob)
+
+# Calculate win probability based on fgm3
+twfgm3 <- as.data.frame(count(tdr$Wfgm3))
+tlfgm3 <- as.data.frame(count(tdr$Lfgm3))
+tfgm3_prob <- merge(twfgm3, tlfgm3, by=c("x"="x"), all=TRUE)
+
+colnames(tfgm3_prob)[1] <- "no.fgm3"
+colnames(tfgm3_prob)[2] <- "win"
+colnames(tfgm3_prob)[3] <- "loss"
+
+tfgm3_prob['prob'] <- probCalc(tfgm3_prob)
+
+# Calculate win probability based on fga3
+twfga3 <- as.data.frame(count(tdr$Wfga3))
+tlfga3 <- as.data.frame(count(tdr$Lfga3))
+tfga3_prob <- merge(twfga3, tlfga3, by=c("x"="x"), all=TRUE)
+
+colnames(tfga3_prob)[1] <- "no.fga3"
+colnames(tfga3_prob)[2] <- "win"
+colnames(tfga3_prob)[3] <- "loss"
+
+tfga3_prob['prob'] <- probCalc(tfga3_prob)
+
+# Calculate win probability based on tfm
+twftm <- as.data.frame(count(tdr$Wftm))
+tlftm <- as.data.frame(count(tdr$Lftm))
+tftm_prob <- merge(twftm, tlftm, by=c("x"="x"), all=TRUE)
+
+colnames(tftm_prob)[1] <- "no.ftm"
+colnames(tftm_prob)[2] <- "win"
+colnames(tftm_prob)[3] <- "loss"
+
+tftm_prob['prob'] <- probCalc(tftm_prob)
+
+# Calculate win probability based on tfa
+twfta <- as.data.frame(count(tdr$Wfta))
+tlfta <- as.data.frame(count(tdr$Lfta))
+tfta_prob <- merge(twfta, tlfta, by=c("x"="x"), all=TRUE)
+
+colnames(tfta_prob)[1] <- "no.fta"
+colnames(tfta_prob)[2] <- "win"
+colnames(tfta_prob)[3] <- "loss"
+
+tfta_prob['prob'] <- probCalc(tfta_prob)
+
+# Calculate win probability based on or
+twor <- as.data.frame(count(tdr$Wor))
+tlor <- as.data.frame(count(tdr$Lor))
+tor_prob <- merge(twor, tlor, by=c("x"="x"), all=TRUE)
+
+colnames(tor_prob)[1] <- "no.or"
+colnames(tor_prob)[2] <- "win"
+colnames(tor_prob)[3] <- "loss"
+
+tor_prob['prob'] <- probCalc(tor_prob)
+
+# Calculate win probability based on dr
+twdr <- as.data.frame(count(tdr$Wdr))
+tldr <- as.data.frame(count(tdr$Ldr))
+tdr_prob <- merge(twdr, tldr, by=c("x"="x"), all=TRUE)
+
+colnames(tdr_prob)[1] <- "no.dr"
+colnames(tdr_prob)[2] <- "win"
+colnames(tdr_prob)[3] <- "loss"
+
+tdr_prob['prob'] <- probCalc(tdr_prob)
+
+# Calculate win probability based on ast
+twast <- as.data.frame(count(tdr$Wast))
+tlast <- as.data.frame(count(tdr$Last))
+tast_prob <- merge(twast, tlast, by=c("x"="x"), all=TRUE)
+
+colnames(tast_prob)[1] <- "no.ast"
+colnames(tast_prob)[2] <- "win"
+colnames(tast_prob)[3] <- "loss"
+
+tast_prob['prob'] <- probCalc(tast_prob)
+
+# Calculate win probability based on to
+twto <- as.data.frame(count(tdr$Wto))
+tlto <- as.data.frame(count(tdr$Lto))
+tto_prob <- merge(twto, tlto, by=c("x"="x"), all=TRUE)
+
+colnames(tto_prob)[1] <- "no.to"
+colnames(tto_prob)[2] <- "win"
+colnames(tto_prob)[3] <- "loss"
+
+tto_prob['prob'] <- probCalc(tto_prob)
+
+# Calculate win probability based on stl
+twstl <- as.data.frame(count(tdr$Wstl))
+tlstl <- as.data.frame(count(tdr$Lstl))
+tstl_prob <- merge(twstl, tlstl, by=c("x"="x"), all=TRUE)
+
+colnames(tstl_prob)[1] <- "no.stl"
+colnames(tstl_prob)[2] <- "win"
+colnames(tstl_prob)[3] <- "loss"
+
+tstl_prob['prob'] <- probCalc(tstl_prob)
+
+# Calculate win probability based on blk
+twblk <- as.data.frame(count(tdr$Wblk))
+tlblk <- as.data.frame(count(tdr$Lblk))
+tblk_prob <- merge(twblk, tlblk, by=c("x"="x"), all=TRUE)
+
+colnames(tblk_prob)[1] <- "no.blk"
+colnames(tblk_prob)[2] <- "win"
+colnames(tblk_prob)[3] <- "loss"
+
+tblk_prob['prob'] <- probCalc(tblk_prob)
+
+# Calculate win probability based on pf
+twpf <- as.data.frame(count(tdr$Wpf))
+tlpf <- as.data.frame(count(tdr$Lpf))
+tpf_prob <- merge(twpf, tlpf, by=c("x"="x"), all=TRUE)
+
+colnames(tpf_prob)[1] <- "no.pf"
+colnames(tpf_prob)[2] <- "win"
+colnames(tpf_prob)[3] <- "loss"
+
+tpf_prob['prob'] <- probCalc(tpf_prob)
+
+#-----------------------------------------
+
+p19 <- ggplot(tscores_prob, aes(x=score, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("Points Scored in Game") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p20 <- ggplot(tfgm_prob, aes(x=no.fgm, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("fgm") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p21 <- ggplot(tfga_prob, aes(x=no.fga, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("fga") + 
+  ylab('Win Probability') +
+  blank_theme2 +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p22 <- ggplot(tfgm3_prob, aes(x=no.fgm3, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("fgm3") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p23 <- ggplot(tfga3_prob, aes(x=no.fga3, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("fga3") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p24 <- ggplot(tftm_prob, aes(x=no.ftm, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("ftm") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p25 <- ggplot(tfta_prob, aes(x=no.fta, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("fta") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p26 <- ggplot(tor_prob, aes(x=no.or, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("or") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p27 <- ggplot(tdr_prob, aes(x=no.dr, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("dr") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p28 <- ggplot(tast_prob, aes(x=no.ast, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("ast") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p29 <- ggplot(tto_prob, aes(x=no.to, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("to") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p30 <- ggplot(tstl_prob, aes(x=no.stl, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("stl") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p31 <- ggplot(tblk_prob, aes(x=no.blk, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("blk") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p32 <- ggplot(tpf_prob, aes(x=no.pf, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlab("pf") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+
+```
+### Win probability across features
+
+How influencial is each feature on the result of the game?
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+multiplot(p19, p20, p21, p22, p23, p24, cols = 2)
+```
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+multiplot(p25, p26, p27, p28, p29, p30, cols = 2)
+```
+```{r fig.width=4, fig.height =2, fig.align='center', message=FALSE, warning=FALSE, echo = FALSE}
+
+multiplot(p31, p32, cols = 2)
+
+```
+
+### Win probability using efficiency metrics 
+
+As stated above, JasonBoudreau suggested using efficiency as a useful indicator of team performance. Here instead of using the raw numbers for the fg ft and fg3 features 
+they have been calculated as made/attempts = efficiency. Ast and to have also been included to indicate team efficiency on offense and defense, as suggested.
+
+With that said, how influencial is are these metrics on the result of the game?
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+# Calculate the efficiencies for differnet features for the winning teams
+tdr["fgWE"] <- tdr$Wfgm / tdr$Wfga
+tdr["ftWE"] <- tdr$Wftm / tdr$Wfta
+tdr["fg3WE"] <- tdr$Wfgm3 / tdr$Wfga3
+tdr["ast_toWE"] <- tdr$Wast / tdr$Wto
+
+# Calculate the efficiencies for differnet features for the losing teams
+tdr["fgLE"] <- tdr$Lfgm / tdr$Lfga
+tdr["ftLE"] <- tdr$Lftm / tdr$Lfta
+tdr["fg3LE"] <- tdr$Lfgm3 / tdr$Lfga3
+tdr["ast_toLE"] <- tdr$Last / tdr$Lto
+
+#----------------------------------------------------------------------
+
+# calculate the win probability based on the fg efiiciency
+twfgE <- as.data.frame(count(tdr$fgWE))
+tlfgE <- as.data.frame(count(tdr$fgLE))
+
+tfgE_prob <- merge(twfgE, tlfgE, by=c("x"="x"), all=TRUE)
+
+colnames(tfgE_prob)[1] <- "Efficiency"
+colnames(tfgE_prob)[2] <- "win"
+colnames(tfgE_prob)[3] <- "loss"
+
+tfgE_prob['prob'] <- probCalc(tfgE_prob)
+
+# calculate the win probability based on the ft efiiciency
+twftE <- as.data.frame(count(tdr$ftWE))
+tlftE <- as.data.frame(count(tdr$ftLE))
+
+tftE_prob <- merge(twftE, tlftE, by=c("x"="x"), all=TRUE)
+
+colnames(tftE_prob)[1] <- "Efficiency"
+colnames(tftE_prob)[2] <- "win"
+colnames(tftE_prob)[3] <- "loss"
+
+tftE_prob['prob'] <- probCalc(tftE_prob)
+
+# calculate the win probability based on the fg3 efiiciency
+twfg3E <- as.data.frame(count(tdr$fg3WE))
+tlfg3E <- as.data.frame(count(tdr$fg3LE))
+
+tfg3E_prob <- merge(twfg3E, tlfg3E, by=c("x"="x"), all=TRUE)
+
+colnames(tfg3E_prob)[1] <- "Efficiency"
+colnames(tfg3E_prob)[2] <- "win"
+colnames(tfg3E_prob)[3] <- "loss"
+
+tfg3E_prob['prob'] <- probCalc(tfg3E_prob)
+
+# calculate the win probability based on the ast/ to efiiciency
+twastE <- as.data.frame(count(tdr$ast_toWE))
+tlastE <- as.data.frame(count(tdr$ast_toLE))
+
+tast_to_prob <- merge(twastE, tlastE, by=c("x"="x"), all=TRUE)
+
+colnames(tast_to_prob)[1] <- "Efficiency"
+colnames(tast_to_prob)[2] <- "win"
+colnames(tast_to_prob)[3] <- "loss"
+
+tast_to_prob['prob'] <- probCalc(tast_to_prob)
+
+# plots ----------------------------------------------------
+
+p32 <- ggplot(tfgE_prob, aes(x=Efficiency*100, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlim(0, 100) +
+  xlab("fgm / fga percentage") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p33 <- ggplot(tftE_prob, aes(x=Efficiency*100, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlim(0, 100) +
+  xlab("ftm / fta percentage") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p34 <- ggplot(tfg3E_prob, aes(x=Efficiency*100, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlim(0, 100) +
+  xlab("fg3m / fg3a percentage") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+
+p35 <- ggplot(tast_to_prob, aes(x=Efficiency*100, y=prob)) +
+  blank_theme2 +
+  geom_point(stat='identity') +
+  geom_smooth() +
+  ylim(0, 1) +
+  xlim(0, 100) +
+  xlab("ast / to percentage") + 
+  ylab('Win Probability') +
+  theme(axis.title.x = element_text(size=11), axis.title.y = element_text(size=11)) +
+  theme(aspect.ratio=1)
+```
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
+multiplot(p32, p33, p34, p35,  cols = 2)
+```
+ <br><br>
+
+~ If you found this kernel useful or interesting, an upvote would be much appreciated.
