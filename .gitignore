@@ -1,14 +1,22 @@
 # Data 
-RegularSeasonCompactResults.csv
-RegularSeasonDetailedResults.csv
-SampleSubmission.csv
-Seasons.csv
-Teams.csv
-TourneyCompactResults.csv
-TourneyDetailedResults.csv
-TourneySeeds.csv
-TourneySlots.csv
-
+DataFiles/*
+MasseyOrdinals_thruSeason2018_Day128.csv
+MasseyOrdinals.csv
+PlayByPlay_2010/*
+PlayByPlay_2011/*
+PlayByPlay_2012/*
+PlayByPlay_2013/*
+PlayByPlay_2014/*
+PlayByPlay_2015/*
+PlayByPlay_2016/*
+PlayByPlay_2017/*
+PlayByPlay_2018/*
+PrelimData2018/*
+SampleSubmissionStage1.csv
+SampleSubmissionStage2.csv
+SampleTourney2018/*
+Stage2UnchangedDataFiles/*
+Stage2UpdatedDataFiles/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
