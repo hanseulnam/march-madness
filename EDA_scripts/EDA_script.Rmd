@@ -1,5 +1,5 @@
 ---
-title: "Exploring MMLM2017"
+title: "Exploring NCAA Data"
 output: 
     html_document: 
       toc: true
@@ -7,7 +7,7 @@ output:
 
 ```{r message=FALSE, warning=FALSE, echo = FALSE}
 # get correct root file
-knitr::opts_knit$set(root.dir = 'C:/Users/Jamie/Downloads/DataFiles')
+knitr::opts_knit$set(root.dir = 'C:/Users/Jamie/Documents/GitHub/march-madness', colclasses=)
 
 # load packages 
 library(data.table)
@@ -17,13 +17,12 @@ library(ggplot2)
 library(gridExtra)
 library(ggExtra)
 
-# load data
-teams <- read.csv('Teams.csv')
-seasons <- read.csv('/kaggle/input/Seasons.csv')
-rsdr <- read.csv('/kaggle/input/RegularSeasonDetailedResults.csv')
-tdr <- read.csv('/kaggle/input/TourneyDetailedResults.csv')
-Tseeds <- read.csv('/kaggle/input/TourneySeeds.csv')
-Tslots <- read.csv('/kaggle/input/TourneySlots.csv')
+```
+
+```{r Clean_how_far}
+
+results <- data.table::fread('EDA/NCAATourneyCompactResults.csv', )
+
 ```
 
 ```{r message=FALSE, warning=FALSE, echo = FALSE}
