@@ -7,7 +7,7 @@ output:
 
 ```{r message=FALSE, warning=FALSE, echo = FALSE}
 # get correct root file
-knitr::opts_knit$set(root.dir = 'C:/Users/Jamie/Documents/GitHub/march-madness', colclasses=)
+knitr::opts_knit$set(root.dir = 'C:/Users/Jamie/Documents/GitHub/march-madness')
 
 # load packages 
 library(data.table)
@@ -20,8 +20,29 @@ library(ggExtra)
 ```
 
 ```{r Clean_how_far}
+setwd('C:/Users/Jamie/Documents/GitHub/march-madness/EDA')
+long <- data.table::fread('NCAATourneyCompactResults.csv')
+results <- filter(long, Season > 2008, DayNum > 135)
 
-results <- data.table::fread('EDA/NCAATourneyCompactResults.csv', )
+
+all_teams <- unique(c(results$WTeamID, results$LTeamID))
+n_teams <- length(all_teams)
+
+foo <- data.frame(year)
+
+years <- unique(results$Season)
+for (year in years) {
+  this_year <- filter(results, Season == year)
+  
+}
+round_reached
+
+df <- data.frame(Season = c(rep(2009, n_teams),rep(2010,n_teams),rep(2011,n_teams),rep(2012,n_teams),rep(2013,n_teams),rep(2014,n_teams),rep(2015,n_teams),rep(2016,n_teams),rep(2017,n_teams)),
+                 TeamID = rep(all_teams, 9))
+
+
+group_results <- results %>%
+  group_by()
 
 ```
 
