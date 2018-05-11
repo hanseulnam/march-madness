@@ -16,8 +16,14 @@ library(magrittr)
 library(ggplot2)
 library(gridExtra)
 library(ggExtra)
-
 ```
+
+```{r, load_data}
+setwd('C:/Users/Jamie/Documents/GitHub/march-madness')
+
+master <- data.table::fread('master_data.csv')
+```
+
 
 ```{r Clean_how_far}
 setwd('C:/Users/Jamie/Documents/GitHub/march-madness/EDA')
